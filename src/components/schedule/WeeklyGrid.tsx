@@ -1,248 +1,337 @@
 'use client';
 
-import type { Appointment, TreatmentCode } from '@/types/database';
+import type { Appointment, Therapist, Room, TreatmentCode } from '@/types/database';
 
-// ── 그리드 상수 ─────────────────────────────────────────────
-const SLOT_HEIGHT = 52;          // px / 30분 슬롯
-const GRID_START  = 8 * 60 + 30; // 8:30 (분 단위)
-const GRID_END    = 18 * 60;     // 18:00
-const NUM_SLOTS   = (GRID_END - GRID_START) / 30; // 19슬롯
+// ── 상수 ────────────────────────────────────────────────────
+const SLOT_MIN   = 30;
+const GRID_START = 8 * 60 + 30;  // 08:30
+const GRID_END   = 17 * 60 + 30; // 17:30
+const LUNCH_S    = 12 * 60;      // 12:00
+const LUNCH_E    = 13 * 60;      // 13:00
+const LUNCH_N    = (LUNCH_E - LUNCH_S) / SLOT_MIN; // 점심 슬롯 수 (2)
+
+const TIME_SLOTS: number[] = [];
+for (let m = GRID_START; m < GRID_END; m += SLOT_MIN) TIME_SLOTS.push(m);
 
 const DAY_KO = ['월', '화', '수', '목', '금'];
 
-// 시간 레이블 생성 (8:30, 9:00 … 18:00)
-const TIME_LABELS = Array.from({ length: NUM_SLOTS + 1 }, (_, i) => {
-  const total = GRID_START + i * 30;
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return `${h}:${m.toString().padStart(2, '0')}`;
-});
-
-// 블록 타입별 기본 색상 (처방코드 없는 경우)
-const BLOCK_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  '환자치료': { bg: '#dbeafe', border: '#3b82f6', text: '#1e40af' },
-  '병동블록': { bg: '#fef3c7', border: '#f59e0b', text: '#92400e' },
-  '경과기록': { bg: '#ede9fe', border: '#8b5cf6', text: '#4c1d95' },
-  '평가':     { bg: '#d1fae5', border: '#10b981', text: '#064e3b' },
-};
-
-// ── 타입 ────────────────────────────────────────────────────
-export type AppointmentRow = Appointment & {
-  patient: { id: string; name: string } | null;
-  therapist: { id: string; name: string } | null;
-};
-
-interface LayoutItem {
-  appt: AppointmentRow;
-  col: number;
-  numCols: number;
+function fmtTime(min: number) {
+  return `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
 }
-
-// ── 겹침 레이아웃 계산 ───────────────────────────────────────
-function timeToMin(t: string): number {
+function toMin(t: string) {
   const [h, m] = t.split(':').map(Number);
   return h * 60 + m;
 }
 
-function computeLayout(appts: AppointmentRow[]): LayoutItem[] {
-  if (!appts.length) return [];
+// ── 타입 ────────────────────────────────────────────────────
+export type AppointmentRow = Appointment & {
+  patient:   { id: string; name: string } | null;
+  therapist: { id: string; name: string } | null;
+};
 
-  const sorted = [...appts].sort((a, b) => timeToMin(a.start_time) - timeToMin(b.start_time));
-  const colEnds: number[] = [];
-  const assigned: { appt: AppointmentRow; col: number }[] = [];
+type CellData = { appt: AppointmentRow; rowspan: number } | 'skip' | null;
 
-  for (const appt of sorted) {
-    const start = timeToMin(appt.start_time);
-    const end   = start + appt.duration_min;
-    let col = colEnds.findIndex(e => e <= start);
-    if (col === -1) { col = colEnds.length; colEnds.push(end); }
-    else             { colEnds[col] = end; }
-    assigned.push({ appt, col });
+// ── 셀 맵 구축 ───────────────────────────────────────────────
+function buildCellMap(appts: AppointmentRow[], weekDates: Date[]) {
+  const map = new Map<string, CellData>();
+
+  for (const appt of appts) {
+    let dayIdx = appt.day_of_week != null
+      ? appt.day_of_week - 1
+      : weekDates.findIndex(d => d.toISOString().slice(0, 10) === appt.date);
+    if (dayIdx < 0 || dayIdx > 4) continue;
+
+    const startMin = toMin(appt.start_time);
+    if (startMin >= LUNCH_S && startMin < LUNCH_E) continue; // 점심 중 예약 무시
+
+    const slotIdx = TIME_SLOTS.indexOf(startMin);
+    if (slotIdx === -1) continue;
+
+    // 점심에 걸치면 잘라냄
+    const endMin    = Math.min(startMin + appt.duration_min, LUNCH_S);
+    const rowspan   = Math.max(1, Math.ceil((endMin - startMin) / SLOT_MIN));
+    const key       = `${dayIdx}-${appt.therapist_id}-${slotIdx}`;
+
+    if (!map.has(key)) {
+      map.set(key, { appt, rowspan });
+      for (let i = 1; i < rowspan; i++) {
+        const sk = `${dayIdx}-${appt.therapist_id}-${slotIdx + i}`;
+        if (!map.has(sk)) map.set(sk, 'skip');
+      }
+    }
   }
-
-  const numCols = colEnds.length;
-  return assigned.map(a => ({ ...a, numCols }));
+  return map;
 }
 
-// ── WeeklyGrid 컴포넌트 ──────────────────────────────────────
+// ── Props ────────────────────────────────────────────────────
 interface Props {
   appointments: AppointmentRow[];
+  therapists:   (Therapist & { room: Room })[];
   treatmentCodes: TreatmentCode[];
-  weekDates: Date[];   // [월, 화, 수, 목, 금]
-  loading?: boolean;
+  rooms:        Room[];
+  weekDates:    Date[];
+  loading?:     boolean;
 }
 
-export default function WeeklyGrid({ appointments, treatmentCodes, weekDates, loading }: Props) {
+// 치료실 색상
+const ROOM_STYLE: Record<string, { day: string; room: string; th: string; cellBg: string }> = {
+  '작업치료실': { day: '#047857', room: '#059669', th: '#a7f3d0', cellBg: '#f0fdf4' },
+  '운동치료실': { day: '#0369a1', room: '#0284c7', th: '#bae6fd', cellBg: '#f0f9ff' },
+};
+const DEFAULT_STYLE = { day: '#6b7280', room: '#9ca3af', th: '#e5e7eb', cellBg: '#f9fafb' };
+
+// ── 컴포넌트 ─────────────────────────────────────────────────
+export default function WeeklyGrid({
+  appointments, therapists, treatmentCodes, rooms, weekDates, loading,
+}: Props) {
   const codeMap = Object.fromEntries(treatmentCodes.map(c => [c.code, c]));
-  const gridHeight = NUM_SLOTS * SLOT_HEIGHT;
-  const today = new Date().toDateString();
+
+  // 치료실 순서: 작업 → 운동
+  const sortedRooms = [...rooms].sort(a =>
+    a.name === '작업치료실' ? -1 : 1
+  );
+
+  // 치료사: 치료실 순 → 이름 순
+  const sortedTherapists = sortedRooms.flatMap(room =>
+    therapists
+      .filter(t => t.room_id === room.id)
+      .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+  );
+
+  const totalCols  = sortedTherapists.length;
+  const cellMap    = buildCellMap(appointments, weekDates);
+  const today      = new Date().toDateString();
+
+  // 헤더 높이
+  const H1 = 32, H2 = 26, H3 = 30;
+  const ROW_H = 32;
+  const TIME_W = 52;
+  const COL_W  = 84;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24 text-gray-400 text-sm">
+        불러오는 중…
+      </div>
+    );
+  }
 
   return (
-    <div className="flex flex-col min-w-[700px]">
-      {/* ── 날짜 헤더 (sticky) ── */}
-      <div className="flex bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
-        <div className="w-16 shrink-0 border-r border-gray-100" />
-        {weekDates.map((date, i) => {
-          const isToday = date.toDateString() === today;
-          return (
-            <div key={i} className="flex-1 text-center py-2 border-r border-gray-100 last:border-r-0">
-              <div className={`text-xs font-medium mb-0.5 ${isToday ? 'text-blue-500' : 'text-gray-400'}`}>
-                {DAY_KO[i]}
-              </div>
-              <div className="flex items-center justify-center">
-                <span
-                  className={`text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full ${
-                    isToday ? 'bg-blue-600 text-white' : 'text-gray-700'
-                  }`}
+    <div className="overflow-auto">
+      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 11 }}>
+        <colgroup>
+          <col style={{ width: TIME_W }} />
+          {weekDates.flatMap(() =>
+            sortedTherapists.map(t => (
+              <col key={t.id} style={{ width: COL_W }} />
+            ))
+          )}
+        </colgroup>
+
+        <thead>
+          {/* ── 요일 헤더 ── */}
+          <tr>
+            <th
+              rowSpan={3}
+              style={{
+                position: 'sticky', top: 0, left: 0, zIndex: 40,
+                background: '#f3f4f6', border: '1px solid #d1d5db',
+                textAlign: 'center', fontWeight: 700, color: '#374151',
+                height: H1 + H2 + H3,
+              }}
+            >
+              시간
+            </th>
+            {weekDates.map((date, i) => {
+              const isToday = date.toDateString() === today;
+              const bg = isToday ? '#b45309' : '#d97706';
+              return (
+                <th
+                  key={i}
+                  colSpan={totalCols}
+                  style={{
+                    position: 'sticky', top: 0, zIndex: 30,
+                    background: bg, border: '1px solid #92400e',
+                    textAlign: 'center', fontWeight: 700, color: 'white',
+                    height: H1,
+                  }}
                 >
-                  {date.getDate()}
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                  {DAY_KO[i]}&nbsp;({date.getMonth() + 1}/{date.getDate()})
+                </th>
+              );
+            })}
+          </tr>
 
-      {/* ── 그리드 본체 ── */}
-      {loading ? (
-        <div className="flex-1 flex items-center justify-center py-20 text-gray-400 text-sm">
-          불러오는 중…
-        </div>
-      ) : (
-        <div className="flex">
-          {/* 시간 레이블 */}
-          <div className="w-16 shrink-0 relative border-r border-gray-100" style={{ height: gridHeight }}>
-            {TIME_LABELS.map((label, i) => (
-              <div
-                key={i}
-                className="absolute right-2 text-[10px] text-gray-400 select-none"
-                style={{ top: i * SLOT_HEIGHT - 7 }}
-              >
-                {label}
-              </div>
-            ))}
-          </div>
+          {/* ── 치료실 헤더 ── */}
+          <tr>
+            {weekDates.flatMap((_, di) =>
+              sortedRooms.map(room => {
+                const tCnt  = sortedTherapists.filter(t => t.room_id === room.id).length;
+                const style = ROOM_STYLE[room.name] ?? DEFAULT_STYLE;
+                return (
+                  <th
+                    key={`${di}-${room.id}`}
+                    colSpan={tCnt}
+                    style={{
+                      position: 'sticky', top: H1, zIndex: 30,
+                      background: style.room, border: '1px solid rgba(0,0,0,.15)',
+                      textAlign: 'center', fontWeight: 600, color: 'white',
+                      height: H2,
+                    }}
+                  >
+                    {room.name}
+                  </th>
+                );
+              })
+            )}
+          </tr>
 
-          {/* 요일 컬럼들 */}
-          {weekDates.map((date, dayIdx) => {
-            const dow     = dayIdx + 1; // 1=월 … 5=금
-            const dateStr = date.toISOString().split('T')[0];
-            const isToday = date.toDateString() === today;
+          {/* ── 치료사 헤더 ── */}
+          <tr>
+            {weekDates.flatMap((_, di) =>
+              sortedTherapists.map(t => {
+                const style = ROOM_STYLE[t.room?.name ?? ''] ?? DEFAULT_STYLE;
+                return (
+                  <th
+                    key={`${di}-${t.id}`}
+                    style={{
+                      position: 'sticky', top: H1 + H2, zIndex: 30,
+                      background: style.th, border: '1px solid rgba(0,0,0,.1)',
+                      textAlign: 'center', fontWeight: 600, color: '#1f2937',
+                      height: H3,
+                    }}
+                  >
+                    {t.name}
+                  </th>
+                );
+              })
+            )}
+          </tr>
+        </thead>
 
-            const dayAppts = appointments.filter(
-              a => a.day_of_week === dow || a.date === dateStr
-            );
-            const layout = computeLayout(dayAppts);
+        <tbody>
+          {TIME_SLOTS.map((slotMin, si) => {
+            const isLunch      = slotMin >= LUNCH_S && slotMin < LUNCH_E;
+            const isLunchStart = slotMin === LUNCH_S;
+            const isHour       = slotMin % 60 === 0;
+
+            // 점심 두 번째 슬롯은 rowspan 으로 커버됨 → 빈 행만
+            if (isLunch && !isLunchStart) return <tr key={si} />;
 
             return (
-              <div
-                key={dayIdx}
-                className={`flex-1 relative border-r border-gray-100 last:border-r-0 ${
-                  isToday ? 'bg-blue-50/30' : 'bg-white'
-                }`}
-                style={{ height: gridHeight }}
-              >
-                {/* 그리드 라인 */}
-                {Array.from({ length: NUM_SLOTS }, (_, i) => (
-                  <div
-                    key={i}
-                    className={`absolute inset-x-0 border-t ${
-                      i % 2 === 0 ? 'border-gray-100' : 'border-gray-50'
-                    }`}
-                    style={{ top: i * SLOT_HEIGHT }}
-                  />
-                ))}
-                {/* 정시 강조선 */}
-                {Array.from({ length: NUM_SLOTS }, (_, i) => (
-                  i % 2 === 0 && (
-                    <div
-                      key={`hour-${i}`}
-                      className="absolute inset-x-0 border-t border-gray-200"
-                      style={{ top: i * SLOT_HEIGHT }}
-                    />
-                  )
-                ))}
+              <tr key={si}>
+                {/* 시간 레이블 */}
+                <td
+                  rowSpan={isLunchStart ? LUNCH_N : 1}
+                  style={{
+                    position: 'sticky', left: 0, zIndex: 10,
+                    background: isLunch ? '#f3f4f6' : (isHour ? '#f8fafc' : 'white'),
+                    border: '1px solid #e5e7eb',
+                    borderTop: isHour ? '1px solid #9ca3af' : '1px solid #e5e7eb',
+                    textAlign: 'center', color: '#6b7280', fontWeight: 500,
+                    height: isLunchStart ? ROW_H * LUNCH_N : ROW_H,
+                    verticalAlign: 'middle',
+                  }}
+                >
+                  {fmtTime(slotMin)}
+                </td>
 
-                {/* 예약 블록들 */}
-                {layout.map(({ appt, col, numCols }) => {
-                  const startMin = timeToMin(appt.start_time);
-                  const top      = ((startMin - GRID_START) / 30) * SLOT_HEIGHT;
-                  const height   = Math.max((appt.duration_min / 30) * SLOT_HEIGHT - 2, 20);
-                  const widthPct = 100 / numCols;
-                  const leftPct  = (col / numCols) * 100;
-
-                  // 색상 결정
-                  let bgColor     = BLOCK_COLORS['환자치료'].bg;
-                  let borderColor = BLOCK_COLORS['환자치료'].border;
-                  let textColor   = BLOCK_COLORS['환자치료'].text;
-
-                  if (appt.treatment_code && codeMap[appt.treatment_code]) {
-                    const hex = codeMap[appt.treatment_code].color_hex;
-                    bgColor     = `#${hex}55`;
-                    borderColor = `#${hex}`;
-                    textColor   = '#374151';
-                  } else if (BLOCK_COLORS[appt.block_type]) {
-                    bgColor     = BLOCK_COLORS[appt.block_type].bg;
-                    borderColor = BLOCK_COLORS[appt.block_type].border;
-                    textColor   = BLOCK_COLORS[appt.block_type].text;
-                  }
-
-                  const isSmall = height < 40;
-
+                {/* 점심 셀 */}
+                {isLunchStart && weekDates.map((date, di) => {
+                  const isToday = date.toDateString() === today;
                   return (
-                    <div
-                      key={appt.id}
-                      title={`${appt.patient?.name ?? appt.block_type} — ${appt.therapist?.name ?? ''} (${appt.start_time}, ${appt.duration_min}분)`}
-                      className="absolute rounded overflow-hidden cursor-pointer transition-all hover:brightness-95 hover:shadow-md"
+                    <td
+                      key={di}
+                      colSpan={totalCols}
+                      rowSpan={LUNCH_N}
                       style={{
-                        top: top + 1,
-                        height,
-                        left:  `calc(${leftPct}% + 2px)`,
-                        width: `calc(${widthPct}% - 4px)`,
-                        backgroundColor: bgColor,
-                        borderLeft: `3px solid ${borderColor}`,
-                        zIndex: 2,
+                        background: isToday ? '#fef9c3' : '#f3f4f6',
+                        border: '1px solid #d1d5db',
+                        textAlign: 'center', fontWeight: 600,
+                        color: '#9ca3af', letterSpacing: '0.1em',
+                        verticalAlign: 'middle',
+                        height: ROW_H * LUNCH_N,
                       }}
                     >
-                      <div className="px-1.5 py-0.5 h-full flex flex-col justify-start overflow-hidden">
-                        {/* 처방코드 뱃지 */}
-                        {appt.treatment_code && codeMap[appt.treatment_code] && !isSmall && (
-                          <span
-                            className="inline-block text-[9px] font-bold px-1 rounded mb-0.5 self-start leading-tight"
-                            style={{ backgroundColor: borderColor, color: 'white' }}
-                          >
-                            {appt.treatment_code}
-                          </span>
-                        )}
-                        {/* 환자/블록명 */}
-                        <span
-                          className="text-[11px] font-semibold leading-tight truncate"
-                          style={{ color: textColor }}
-                        >
-                          {appt.patient?.name ?? appt.block_type}
-                        </span>
-                        {/* 치료사 이름 */}
-                        {!isSmall && appt.therapist?.name && (
-                          <span className="text-[10px] text-gray-500 truncate leading-tight">
-                            {appt.therapist.name}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                      점심시간
+                    </td>
                   );
                 })}
 
-                {/* 예약 없는 날 안내 (비어있는 경우) */}
-                {dayAppts.length === 0 && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <span className="text-[10px] text-gray-200 select-none">—</span>
-                  </div>
-                )}
-              </div>
+                {/* 일반 예약 셀 */}
+                {!isLunch && weekDates.flatMap((date, di) => {
+                  const isToday = date.toDateString() === today;
+                  return sortedTherapists.map(t => {
+                    const key  = `${di}-${t.id}-${si}`;
+                    const cell = cellMap.get(key) ?? null;
+                    if (cell === 'skip') return null;
+
+                    const todayBg = isToday ? '#fefce8' : 'white';
+                    const hourBorderTop = isHour ? '1px solid #d1d5db' : '1px solid #f3f4f6';
+
+                    if (!cell) {
+                      return (
+                        <td
+                          key={key}
+                          style={{
+                            background: todayBg,
+                            border: '1px solid #f3f4f6',
+                            borderTop: hourBorderTop,
+                            height: ROW_H,
+                          }}
+                        />
+                      );
+                    }
+
+                    const { appt, rowspan } = cell;
+                    const code  = appt.treatment_code ? codeMap[appt.treatment_code] : null;
+                    const rStyle = ROOM_STYLE[t.room?.name ?? ''] ?? DEFAULT_STYLE;
+
+                    let bg = rStyle.cellBg;
+                    if (code) bg = `#${code.color_hex}40`;
+
+                    const name   = appt.patient?.name ?? appt.block_type;
+                    const suffix = code ? ` ${appt.treatment_code}` : '';
+
+                    return (
+                      <td
+                        key={key}
+                        rowSpan={rowspan}
+                        title={`${name}${suffix}  ${appt.start_time} (${appt.duration_min}분)`}
+                        style={{
+                          background: bg,
+                          border: '1px solid #d1d5db',
+                          borderTop: hourBorderTop,
+                          padding: '2px 4px',
+                          verticalAlign: 'top',
+                          height: ROW_H * rowspan,
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <div style={{ lineHeight: 1.3 }}>
+                          <span style={{ fontWeight: 600, color: '#111827' }}>{name}</span>
+                          {code && (
+                            <span
+                              style={{
+                                marginLeft: 3,
+                                fontWeight: 700,
+                                fontSize: 10,
+                                color: `#${code.color_hex}`,
+                              }}
+                            >
+                              {appt.treatment_code}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  });
+                })}
+              </tr>
             );
           })}
-        </div>
-      )}
+        </tbody>
+      </table>
     </div>
   );
 }
