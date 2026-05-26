@@ -80,9 +80,10 @@ export default function AppointmentModal({
   const [note, setNote] = useState<string>(isEdit ? (appt!.note ?? '') : '');
 
   const [conflict,  setConflict]  = useState<string | null>(null);
-  const [saving,    setSaving]    = useState(false);
-  const [deleting,  setDeleting]  = useState(false);
-  const [searching, setSearching] = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [deleting,   setDeleting]   = useState(false);
+  const [searching,  setSearching]  = useState(false);
+  const [creatingPt, setCreatingPt] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
   // 수정 모드: 기존 환자 로드
@@ -120,6 +121,22 @@ export default function AppointmentModal({
       setSearching(false);
     }, 250);
     return () => clearTimeout(t);
+  }, [patientSearch]);
+
+  // ── 신규 환자 생성 ──────────────────────────────────────────
+  const handleCreatePatient = useCallback(async () => {
+    const name = patientSearch.trim();
+    if (!name) return;
+    setCreatingPt(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const patientsTable = createClient().from('patients') as any;
+    const { data, error } = await patientsTable.insert({ name }).select().single();
+    setCreatingPt(false);
+    if (!error && data) {
+      setSelectedPt(data as Patient);
+      setPatientSearch('');
+      setPatients([]);
+    }
   }, [patientSearch]);
 
   // ── 충돌 감지 ───────────────────────────────────────────────
@@ -288,6 +305,7 @@ export default function AppointmentModal({
                   {searching && (
                     <div className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
                   )}
+                  {/* 검색 결과 목록 */}
                   {patients.length > 0 && (
                     <ul className="absolute z-10 top-full left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-40 overflow-auto">
                       {patients.map(p => (
@@ -304,6 +322,22 @@ export default function AppointmentModal({
                         </li>
                       ))}
                     </ul>
+                  )}
+
+                  {/* 검색 결과 없음 → 신규 환자 등록 */}
+                  {patientSearch.trim() && !searching && patients.length === 0 && (
+                    <div className="mt-2 flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                      <span className="text-amber-600 text-xs flex-1">
+                        <strong>"{patientSearch.trim()}"</strong> 환자가 없습니다
+                      </span>
+                      <button
+                        onClick={handleCreatePatient}
+                        disabled={creatingPt}
+                        className="text-xs px-3 py-1.5 bg-amber-500 text-white rounded-lg font-medium hover:bg-amber-600 transition-colors disabled:opacity-50 shrink-0"
+                      >
+                        {creatingPt ? '등록 중…' : '+ 신규 환자 등록'}
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
