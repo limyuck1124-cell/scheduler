@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import WeeklyGrid, { type AppointmentRow } from '@/components/schedule/WeeklyGrid';
+import PatientSearch from '@/components/schedule/PatientSearch';
 import type { Room, Therapist, TreatmentCode } from '@/types/database';
 
 // ── 날짜 유틸 ────────────────────────────────────────────────
@@ -37,6 +38,7 @@ export default function SchedulePage() {
   const [initLoading,    setInitLoading]    = useState(true);
   const [apptLoading,    setApptLoading]    = useState(false);
   const [loggingOut,     setLoggingOut]     = useState(false);
+  const [showSearch,     setShowSearch]     = useState(false);
 
   const weekDates = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
 
@@ -116,6 +118,12 @@ export default function SchedulePage() {
           <div className="flex items-center gap-3">
             <span className="text-xs text-blue-200 hidden sm:block">{userEmail}</span>
             <button
+              onClick={() => setShowSearch(true)}
+              className="text-xs border border-blue-400 text-blue-100 px-3 py-1.5 rounded hover:bg-blue-600 transition-colors flex items-center gap-1.5"
+            >
+              🔍 환자 검색
+            </button>
+            <button
               onClick={handleLogout}
               disabled={loggingOut}
               className="text-xs border border-blue-400 text-blue-100 px-3 py-1.5 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
@@ -155,6 +163,14 @@ export default function SchedulePage() {
           {fmtRange(weekDates[0], weekDates[4])}
         </span>
       </div>
+
+      {/* ── 환자 검색 모달 ── */}
+      {showSearch && (
+        <PatientSearch
+          treatmentCodes={treatmentCodes}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
 
       {/* ── 그리드 ── */}
       <div className="flex-1 overflow-auto">
