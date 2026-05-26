@@ -197,10 +197,22 @@ export default function AdminPage() {
               </button>
             </div>
 
-            {rooms.map(room => {
+            {[...rooms]
+              .sort((a, b) => ['운동치료실', '작업치료실'].indexOf(a.name) - ['운동치료실', '작업치료실'].indexOf(b.name))
+              .map(room => {
+              const THERAPIST_ORDER: Record<string, string[]> = {
+                '운동치료실': ['고명석', '정희돈', '권오민', '김유리'],
+                '작업치료실': ['김보미', '임혁', '백성종'],
+              };
+              const order = THERAPIST_ORDER[room.name] ?? [];
               const roomTherapists = therapists
                 .filter(t => t.room_id === room.id)
-                .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+                .sort((a, b) => {
+                  const ai = order.indexOf(a.name), bi = order.indexOf(b.name);
+                  if (ai === -1 && bi === -1) return a.name.localeCompare(b.name, 'ko');
+                  if (ai === -1) return 1; if (bi === -1) return -1;
+                  return ai - bi;
+                });
               const isJeob = room.name === '작업치료실';
               const rc = isJeob
                 ? { bg: '#f0fdf4', border: '#86efac', text: '#15803d', headerBg: '#dcfce7' }

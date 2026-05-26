@@ -90,16 +90,30 @@ export default function WeeklyGrid({
 }: Props) {
   const codeMap = Object.fromEntries(treatmentCodes.map(c => [c.code, c]));
 
-  // 치료실 순서: 작업 → 운동
-  const sortedRooms = [...rooms].sort(a =>
-    a.name === '작업치료실' ? -1 : 1
+  // 치료실 순서: 운동 → 작업 (고정)
+  const ROOM_ORDER = ['운동치료실', '작업치료실'];
+  const sortedRooms = [...rooms].sort(
+    (a, b) => ROOM_ORDER.indexOf(a.name) - ROOM_ORDER.indexOf(b.name)
   );
 
-  // 치료사: 치료실 순 → 이름 순
+  // 치료사 고정 순서
+  const THERAPIST_ORDER: Record<string, string[]> = {
+    '운동치료실': ['고명석', '정희돈', '권오민', '김유리'],
+    '작업치료실': ['김보미', '임혁', '백성종'],
+  };
+
   const sortedTherapists = sortedRooms.flatMap(room =>
     therapists
       .filter(t => t.room_id === room.id)
-      .sort((a, b) => a.name.localeCompare(b.name, 'ko'))
+      .sort((a, b) => {
+        const order = THERAPIST_ORDER[room.name] ?? [];
+        const ai = order.indexOf(a.name);
+        const bi = order.indexOf(b.name);
+        if (ai === -1 && bi === -1) return a.name.localeCompare(b.name, 'ko');
+        if (ai === -1) return 1;
+        if (bi === -1) return -1;
+        return ai - bi;
+      })
   );
 
   const totalCols  = sortedTherapists.length;
