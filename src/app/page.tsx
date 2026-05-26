@@ -1,32 +1,61 @@
-import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
 import type { Room, Therapist, TreatmentCode } from '@/types/database';
 
-type TherapistWithRoom = Therapist & { room: Pick<Room, 'name'> | null };
+type TherapistWithRoom = Therapist & { room: { name: string } | null };
 
-export default async function HomePage() {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+export default function HomePage() {
+  const [user, setUser] = useState<{ email?: string } | null>(null);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [therapists, setTherapists] = useState<TherapistWithRoom[]>([]);
+  const [treatmentCodes, setTreatmentCodes] = useState<TreatmentCode[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
-  if (!user) {
-    redirect('/login');
+  useEffect(() => {
+    const supabase = createClient();
+
+    async function loadData() {
+      // 로그인 확인
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      setUser(user);
+
+      // 데이터 로드
+      const [roomsRes, therapistsRes, codesRes] = await Promise.all([
+        supabase.from('rooms').select('*'),
+        supabase.from('therapists').select('*, room:rooms(name)'),
+        supabase.from('treatment_codes').select('*'),
+      ]);
+
+      if (roomsRes.error) {
+        setError(roomsRes.error.message);
+      } else {
+        setRooms(roomsRes.data as Room[]);
+        setTherapists(therapistsRes.data as TherapistWithRoom[] ?? []);
+        setTreatmentCodes(codesRes.data as TreatmentCode[] ?? []);
+      }
+
+      setLoading(false);
+    }
+
+    loadData();
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <p className="text-gray-500">불러오는 중...</p>
+      </div>
+    );
   }
-
-  // 데이터베이스 연결 확인
-  const { data: rooms, error: roomsError } = await supabase
-    .from('rooms')
-    .select('*')
-    .returns<Room[]>();
-
-  const { data: therapists, error: therapistsError } = await supabase
-    .from('therapists')
-    .select('*, room:rooms(name)')
-    .returns<TherapistWithRoom[]>();
-
-  const { data: treatmentCodes } = await supabase
-    .from('treatment_codes')
-    .select('*')
-    .returns<TreatmentCode[]>();
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -38,7 +67,7 @@ export default async function HomePage() {
             <p className="text-blue-200 text-sm">작업치료실 · 운동치료실</p>
           </div>
           <div className="text-right">
-            <p className="text-sm text-blue-200">로그인: {user.email}</p>
+            <p className="text-sm text-blue-200">로그인: {user?.email}</p>
           </div>
         </div>
       </header>
@@ -53,23 +82,23 @@ export default async function HomePage() {
         </div>
 
         {/* 오류 표시 */}
-        {(roomsError || therapistsError) && (
+        {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-6 mb-8">
             <h2 className="text-lg font-bold text-red-800 mb-2">⚠️ 데이터베이스 연결 오류</h2>
             <p className="text-red-700 text-sm">
               Supabase 연결을 확인해주세요. SQL 마이그레이션이 실행되었는지 확인하세요.
             </p>
-            {roomsError && <p className="text-red-600 text-xs mt-1">{roomsError.message}</p>}
+            <p className="text-red-600 text-xs mt-1">{error}</p>
           </div>
         )}
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* 치료실 */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h3 className="font-bold text-gray-800 mb-4">🏠 치료실 ({rooms?.length ?? 0}개)</h3>
-            {rooms && rooms.length > 0 ? (
+            <h3 className="font-bold text-gray-800 mb-4">🏠 치료실 ({rooms.length}개)</h3>
+            {rooms.length > 0 ? (
               <ul className="space-y-2">
-                {rooms.map((room: Room) => (
+                {rooms.map((room) => (
                   <li key={room.id} className="flex items-center gap-2 text-sm">
                     <span className="w-2 h-2 rounded-full bg-blue-500 inline-block" />
                     {room.name}
@@ -83,10 +112,10 @@ export default async function HomePage() {
 
           {/* 치료사 */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h3 className="font-bold text-gray-800 mb-4">👨‍⚕️ 치료사 ({therapists?.length ?? 0}명)</h3>
-            {therapists && therapists.length > 0 ? (
+            <h3 className="font-bold text-gray-800 mb-4">👨‍⚕️ 치료사 ({therapists.length}명)</h3>
+            {therapists.length > 0 ? (
               <ul className="space-y-1">
-                {therapists.map((t: TherapistWithRoom) => (
+                {therapists.map((t) => (
                   <li key={t.id} className="text-sm flex items-center gap-2">
                     <span className={`w-2 h-2 rounded-full inline-block ${
                       t.room?.name === '작업치료실' ? 'bg-green-500' : 'bg-orange-500'
@@ -103,10 +132,10 @@ export default async function HomePage() {
 
           {/* 처방코드 */}
           <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
-            <h3 className="font-bold text-gray-800 mb-4">💊 처방코드 ({treatmentCodes?.length ?? 0}종)</h3>
-            {treatmentCodes && treatmentCodes.length > 0 ? (
+            <h3 className="font-bold text-gray-800 mb-4">💊 처방코드 ({treatmentCodes.length}종)</h3>
+            {treatmentCodes.length > 0 ? (
               <ul className="space-y-1">
-                {treatmentCodes.map((tc: TreatmentCode) => (
+                {treatmentCodes.map((tc) => (
                   <li key={tc.code} className="text-sm flex items-center gap-2">
                     <span
                       className="w-8 h-5 rounded text-xs flex items-center justify-center font-bold text-gray-700 border border-gray-300"
