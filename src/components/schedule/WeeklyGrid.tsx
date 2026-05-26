@@ -116,17 +116,12 @@ export default function WeeklyGrid({
     );
   }
 
+  // 테이블 최소 너비: 시간열 + 5일 × 치료사수 × 컬럼너비
+  const tableMinWidth = TIME_W + 5 * Math.max(totalCols, 1) * COL_W;
+
   return (
     <div className="overflow-auto">
-      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 11 }}>
-        <colgroup>
-          <col style={{ width: TIME_W }} />
-          {weekDates.flatMap(() =>
-            sortedTherapists.map(t => (
-              <col key={t.id} style={{ width: COL_W }} />
-            ))
-          )}
-        </colgroup>
+      <table style={{ borderCollapse: 'collapse', tableLayout: 'fixed', fontSize: 11, minWidth: tableMinWidth }}>
 
         <thead>
           {/* ── 요일 헤더 ── */}
@@ -137,6 +132,7 @@ export default function WeeklyGrid({
                 position: 'sticky', top: 0, left: 0, zIndex: 40,
                 background: '#f3f4f6', border: '1px solid #d1d5db',
                 textAlign: 'center', fontWeight: 700, color: '#374151',
+                width: TIME_W, minWidth: TIME_W,
                 height: H1 + H2 + H3,
               }}
             >
@@ -198,6 +194,7 @@ export default function WeeklyGrid({
                       position: 'sticky', top: H1 + H2, zIndex: 30,
                       background: style.th, border: '1px solid rgba(0,0,0,.1)',
                       textAlign: 'center', fontWeight: 600, color: '#1f2937',
+                      width: COL_W, minWidth: COL_W,
                       height: H3,
                     }}
                   >
