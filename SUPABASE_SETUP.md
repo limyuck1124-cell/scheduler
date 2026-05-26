@@ -43,6 +43,16 @@
 
 ---
 
+## 4-1단계 — 접근 권한 부여 (permission denied 오류 해결)
+
+> SQL Editor로 테이블을 만들면 권한을 수동으로 부여해야 합니다.
+
+1. SQL Editor에서 **New query** 클릭
+2. `supabase/migrations/004_grant_permissions.sql` 파일 내용을 전부 복사해서 붙여넣기
+3. **Run** 버튼 클릭 → "Success" 확인
+
+---
+
 ## 5단계 — API 키 가져오기
 
 1. 왼쪽 메뉴에서 **Settings** → **API** 클릭
