@@ -10,14 +10,26 @@ const DAY_KO: Record<number, string> = { 1:'월', 2:'화', 3:'수', 4:'목', 5:'
 const DURATION_OPTIONS = [15, 20, 30, 45, 60, 90];
 const BLOCK_TYPES: Exclude<BlockType, '환자치료'>[] = ['병동블록', '경과기록', '평가'];
 
+// 점심 제외 (12:30~13:00 = 점심시간 12:30~13:30)
+const LUNCH_S_MIN = 12 * 60 + 30; // 12:30
+const LUNCH_E_MIN = 13 * 60 + 30; // 13:30
+
 const TIME_SLOTS: string[] = [];
 for (let h = 8; h <= 17; h++) {
   for (const m of [0, 30]) {
-    if (h === 8 && m === 0) continue; // 8:00 제외
-    if (h === 17 && m === 30) continue;
+    if (h === 8 && m === 0) continue;     // 8:00 제외
+    if (h === 17 && m === 30) continue;   // 17:30 제외
+    const min = h * 60 + m;
+    if (min >= LUNCH_S_MIN && min < LUNCH_E_MIN) continue; // 점심 제외
     TIME_SLOTS.push(`${h}:${String(m).padStart(2, '0')}`);
   }
 }
+
+// 토요일 전용 슬롯 (8:30~12:00)
+const SAT_TIME_SLOTS = TIME_SLOTS.filter(t => {
+  const [hh, mm] = t.split(':').map(Number);
+  return hh * 60 + mm < LUNCH_S_MIN;
+});
 
 function toMin(t: string) {
   const [h, m] = t.split(':').map(Number);
@@ -404,7 +416,15 @@ export default function AppointmentModal({
               <label style={labelStyle}>요일</label>
               <select
                 value={dayOfWeek}
-                onChange={e => setDayOfWeek(Number(e.target.value))}
+                onChange={e => {
+                  const d = Number(e.target.value);
+                  setDayOfWeek(d);
+                  // 토요일로 변경 시 오후 시간이면 오전으로 조정
+                  if (d === 6) {
+                    const curMin = toMin(startTime);
+                    if (curMin >= LUNCH_S_MIN) setStartTime(SAT_TIME_SLOTS[SAT_TIME_SLOTS.length - 1] ?? '12:00');
+                  }
+                }}
                 style={inputStyle}
               >
                 {[1,2,3,4,5,6].map(d => (
@@ -419,7 +439,7 @@ export default function AppointmentModal({
                 onChange={e => setStartTime(e.target.value)}
                 style={inputStyle}
               >
-                {TIME_SLOTS.map(t => (
+                {(dayOfWeek === 6 ? SAT_TIME_SLOTS : TIME_SLOTS).map(t => (
                   <option key={t} value={t}>{t}</option>
                 ))}
               </select>
