@@ -6,7 +6,7 @@ import type { Appointment, Therapist, Room, TreatmentCode, Patient, BlockType, P
 import type { AppointmentRow } from './WeeklyGrid';
 
 // ── 상수 ────────────────────────────────────────────────────
-const DAY_KO: Record<number, string> = { 1:'월', 2:'화', 3:'수', 4:'목', 5:'금' };
+const DAY_KO: Record<number, string> = { 1:'월', 2:'화', 3:'수', 4:'목', 5:'금', 6:'토' };
 const DURATION_OPTIONS = [15, 20, 30, 45, 60, 90];
 const BLOCK_TYPES: Exclude<BlockType, '환자치료'>[] = ['병동블록', '경과기록', '평가'];
 
@@ -38,13 +38,14 @@ interface Props {
   initData:       ModalInitData;
   therapists:     TherapistFull[];
   treatmentCodes: TreatmentCode[];
+  weekDates:      Date[];
   onSaved:        () => void;
   onClose:        () => void;
 }
 
 // ── 컴포넌트 ─────────────────────────────────────────────────
 export default function AppointmentModal({
-  initData, therapists, treatmentCodes, onSaved, onClose,
+  initData, therapists, treatmentCodes, weekDates, onSaved, onClose,
 }: Props) {
   const isEdit = initData.mode === 'edit';
   const appt   = isEdit ? initData.appointment : null;
@@ -66,7 +67,7 @@ export default function AppointmentModal({
     isEdit && appt!.patient_type ? appt!.patient_type as PatientType : '병동'
   );
   const [dayOfWeek, setDayOfWeek]   = useState<number>(
-    isEdit ? (appt!.day_of_week ?? 1) : (initData.dayIdx + 1)
+    isEdit ? (appt!.day_of_week ?? 6) : (initData.dayIdx + 1)
   );
   const [startTime, setStartTime]   = useState<string>(
     isEdit ? appt!.start_time.slice(0, 5) : fmtTime(initData.slotMin)
@@ -143,16 +144,20 @@ export default function AppointmentModal({
   const checkConflict = useCallback(async (): Promise<string | null> => {
     const newStart = toMin(startTime);
     const newEnd   = newStart + durationMin;
+    const isSaturday = dayOfWeek === 6;
+    const satDate = weekDates[5]?.toISOString().slice(0, 10);
 
-    let q = createClient()
+    const supabase = createClient();
+    const base = supabase
       .from('appointments')
-      .select('id, start_time, duration_min, patient_id')
-      .eq('therapist_id', therapistId)
-      .eq('day_of_week', dayOfWeek);
+      .select('id, start_time, duration_min')
+      .eq('therapist_id', therapistId);
 
-    if (isEdit) q = q.neq('id', appt!.id);
+    const q = isSaturday
+      ? base.eq('date', satDate)
+      : base.eq('day_of_week', dayOfWeek);
 
-    const { data } = await q;
+    const { data } = isEdit ? await q.neq('id', appt!.id) : await q;
     type ConflictRow = { id: string; start_time: string; duration_min: number };
     const rows = (data ?? []) as ConflictRow[];
     const conflicting = rows.find(a => {
@@ -161,7 +166,7 @@ export default function AppointmentModal({
     });
     if (!conflicting) return null;
     return `${DAY_KO[dayOfWeek]}요일 ${conflicting.start_time.slice(0,5)}에 이미 예약이 있습니다`;
-  }, [therapistId, dayOfWeek, startTime, durationMin, isEdit, appt]);
+  }, [therapistId, dayOfWeek, startTime, durationMin, isEdit, appt, weekDates]);
 
   // ── 저장 ────────────────────────────────────────────────────
   const handleSave = async () => {
@@ -177,12 +182,17 @@ export default function AppointmentModal({
       if (!ok) { setSaving(false); return; }
     }
 
+    const isSaturday = dayOfWeek === 6;
+    const satDate = isSaturday
+      ? (isEdit && appt!.date ? appt!.date : weekDates[5]?.toISOString().slice(0, 10) ?? null)
+      : null;
+
     const payload: Omit<Appointment, 'id' | 'created_at' | 'updated_at'> = {
       room_id:        therapist!.room_id,
       therapist_id:   therapistId,
       patient_id:     isBlock ? null : (selectedPt?.id ?? null),
-      day_of_week:    dayOfWeek,
-      date:           null,
+      day_of_week:    isSaturday ? null : dayOfWeek,
+      date:           satDate,
       start_time:     startTime,
       duration_min:   durationMin,
       treatment_code: isJeob && !isBlock && treatmentCode ? treatmentCode : null,
@@ -397,7 +407,7 @@ export default function AppointmentModal({
                 onChange={e => setDayOfWeek(Number(e.target.value))}
                 style={inputStyle}
               >
-                {[1,2,3,4,5].map(d => (
+                {[1,2,3,4,5,6].map(d => (
                   <option key={d} value={d}>{DAY_KO[d]}요일</option>
                 ))}
               </select>

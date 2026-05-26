@@ -21,9 +21,12 @@ function addDays(d: Date, n: number): Date {
   r.setDate(r.getDate() + n);
   return r;
 }
-function fmtRange(mon: Date, fri: Date) {
+function fmtRange(mon: Date, sat: Date) {
   const m = mon.getMonth() + 1;
-  return `${mon.getFullYear()}년 ${m}월 ${mon.getDate()}일 — ${fri.getDate()}일`;
+  const satStr = sat.getMonth() + 1 !== m
+    ? `${sat.getMonth() + 1}월 ${sat.getDate()}일`
+    : `${sat.getDate()}일`;
+  return `${mon.getFullYear()}년 ${m}월 ${mon.getDate()}일 — ${satStr}`;
 }
 
 // ── 컴포넌트 ─────────────────────────────────────────────────
@@ -42,7 +45,7 @@ export default function SchedulePage() {
   const [showSearch,     setShowSearch]     = useState(false);
   const [modalData,      setModalData]      = useState<ModalInitData | null>(null);
 
-  const weekDates = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
+  const weekDates = Array.from({ length: 6 }, (_, i) => addDays(weekStart, i)); // 월~토
 
   // ── 초기 로드 ──────────────────────────────────────────────
   useEffect(() => {
@@ -172,7 +175,7 @@ export default function SchedulePage() {
           오늘
         </button>
         <span className="text-sm font-semibold text-gray-700 ml-1">
-          {fmtRange(weekDates[0], weekDates[4])}
+          {fmtRange(weekDates[0], weekDates[5])}
         </span>
       </div>
 
@@ -204,6 +207,7 @@ export default function SchedulePage() {
           initData={modalData}
           therapists={therapists}
           treatmentCodes={treatmentCodes}
+          weekDates={weekDates}
           onSaved={handleModalSaved}
           onClose={() => setModalData(null)}
         />

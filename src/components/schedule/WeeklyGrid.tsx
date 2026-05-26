@@ -13,7 +13,7 @@ const LUNCH_N    = (LUNCH_E - LUNCH_S) / SLOT_MIN; // 점심 슬롯 수 (2)
 const TIME_SLOTS: number[] = [];
 for (let m = GRID_START; m < GRID_END; m += SLOT_MIN) TIME_SLOTS.push(m);
 
-const DAY_KO = ['월', '화', '수', '목', '금'];
+const DAY_KO = ['월', '화', '수', '목', '금', '토'];
 
 function fmtTime(min: number) {
   return `${Math.floor(min / 60)}:${String(min % 60).padStart(2, '0')}`;
@@ -39,7 +39,7 @@ function buildCellMap(appts: AppointmentRow[], weekDates: Date[]) {
     let dayIdx = appt.day_of_week != null
       ? appt.day_of_week - 1
       : weekDates.findIndex(d => d.toISOString().slice(0, 10) === appt.date);
-    if (dayIdx < 0 || dayIdx > 4) continue;
+    if (dayIdx < 0 || dayIdx > 5) continue;
 
     const startMin = toMin(appt.start_time);
     if (startMin >= LUNCH_S && startMin < LUNCH_E) continue; // 점심 중 예약 무시
@@ -120,7 +120,7 @@ export default function WeeklyGrid({
   }
 
   // 테이블 최소 너비: 시간열 + 5일 × 치료사수 × 컬럼너비
-  const tableMinWidth = TIME_W + 5 * Math.max(totalCols, 1) * COL_W;
+  const tableMinWidth = TIME_W + weekDates.length * Math.max(totalCols, 1) * COL_W;
 
   return (
     <div className="overflow-auto">
