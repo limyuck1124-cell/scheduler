@@ -4,101 +4,86 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import WeeklyGrid, { type AppointmentRow } from '@/components/schedule/WeeklyGrid';
-import type { Room, TreatmentCode } from '@/types/database';
+import type { Room, Therapist, TreatmentCode } from '@/types/database';
 
 // ── 날짜 유틸 ────────────────────────────────────────────────
 function getMondayOfWeek(date: Date): Date {
   const d = new Date(date);
   d.setHours(0, 0, 0, 0);
-  const day = d.getDay(); // 0=일 … 6=토
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
+  const day = d.getDay();
+  d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day));
   return d;
 }
-
-function addDays(date: Date, n: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + n);
-  return d;
+function addDays(d: Date, n: number): Date {
+  const r = new Date(d);
+  r.setDate(r.getDate() + n);
+  return r;
+}
+function fmtRange(mon: Date, fri: Date) {
+  const m = mon.getMonth() + 1;
+  return `${mon.getFullYear()}년 ${m}월 ${mon.getDate()}일 — ${fri.getDate()}일`;
 }
 
-function fmtDate(d: Date): string {
-  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
-}
-
-// ── 메인 컴포넌트 ────────────────────────────────────────────
+// ── 컴포넌트 ─────────────────────────────────────────────────
 export default function SchedulePage() {
   const router = useRouter();
 
-  const [userEmail,       setUserEmail]       = useState<string>('');
-  const [rooms,           setRooms]           = useState<Room[]>([]);
-  const [selectedRoomId,  setSelectedRoomId]  = useState<string>('');
-  const [appointments,    setAppointments]    = useState<AppointmentRow[]>([]);
-  const [treatmentCodes,  setTreatmentCodes]  = useState<TreatmentCode[]>([]);
-  const [weekStart,       setWeekStart]       = useState<Date>(() => getMondayOfWeek(new Date()));
-  const [initLoading,     setInitLoading]     = useState(true);
-  const [apptLoading,     setApptLoading]     = useState(false);
-  const [loggingOut,      setLoggingOut]      = useState(false);
+  const [userEmail,      setUserEmail]      = useState('');
+  const [rooms,          setRooms]          = useState<Room[]>([]);
+  const [therapists,     setTherapists]     = useState<(Therapist & { room: Room })[]>([]);
+  const [treatmentCodes, setTreatmentCodes] = useState<TreatmentCode[]>([]);
+  const [appointments,   setAppointments]   = useState<AppointmentRow[]>([]);
+  const [weekStart,      setWeekStart]      = useState<Date>(() => getMondayOfWeek(new Date()));
+  const [initLoading,    setInitLoading]    = useState(true);
+  const [apptLoading,    setApptLoading]    = useState(false);
+  const [loggingOut,     setLoggingOut]     = useState(false);
 
-  // 주간 날짜 배열 [월 ~ 금]
   const weekDates = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
 
-  // ── 초기 데이터 로드 (인증 확인 + 기준정보) ──
+  // ── 초기 로드 ──────────────────────────────────────────────
   useEffect(() => {
     const supabase = createClient();
-
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.replace('/login'); return; }
       setUserEmail(user.email ?? '');
 
-      const [roomsRes, codesRes] = await Promise.all([
+      const [roomsRes, therapistsRes, codesRes] = await Promise.all([
         supabase.from('rooms').select('*').order('name'),
+        supabase.from('therapists').select('*, room:rooms(*)').order('name'),
         supabase.from('treatment_codes').select('*'),
       ]);
 
-      const roomList = (roomsRes.data ?? []) as Room[];
-      setRooms(roomList);
+      setRooms((roomsRes.data ?? []) as Room[]);
+      setTherapists((therapistsRes.data ?? []) as (Therapist & { room: Room })[]);
       setTreatmentCodes((codesRes.data ?? []) as TreatmentCode[]);
-
-      if (roomList.length > 0) setSelectedRoomId(roomList[0].id);
       setInitLoading(false);
     })();
   }, [router]);
 
-  // ── 예약 로드 (치료실 변경 시) ──
-  const loadAppointments = useCallback(async (roomId: string) => {
-    if (!roomId) return;
+  // ── 예약 로드 ──────────────────────────────────────────────
+  const loadAppointments = useCallback(async () => {
     setApptLoading(true);
     const supabase = createClient();
-
     const { data, error } = await supabase
       .from('appointments')
-      .select(`
-        *,
-        patient:patients ( id, name ),
-        therapist:therapists ( id, name )
-      `)
-      .eq('room_id', roomId)
+      .select('*, patient:patients(id, name), therapist:therapists(id, name)')
       .order('start_time');
-
     if (!error) setAppointments((data ?? []) as AppointmentRow[]);
     setApptLoading(false);
   }, []);
 
   useEffect(() => {
-    loadAppointments(selectedRoomId);
-  }, [selectedRoomId, loadAppointments]);
+    if (!initLoading) loadAppointments();
+  }, [initLoading, loadAppointments]);
 
-  // ── 로그아웃 ──
+  // ── 이벤트 핸들러 ──────────────────────────────────────────
   const handleLogout = async () => {
     setLoggingOut(true);
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await createClient().auth.signOut();
     router.replace('/login');
   };
 
-  // ── 주 이동 ──
   const prevWeek  = () => setWeekStart(d => addDays(d, -7));
   const nextWeek  = () => setWeekStart(d => addDays(d, +7));
   const goToToday = () => setWeekStart(getMondayOfWeek(new Date()));
@@ -106,36 +91,34 @@ export default function SchedulePage() {
   const isCurrentWeek =
     getMondayOfWeek(new Date()).toDateString() === weekStart.toDateString();
 
-  const selectedRoom = rooms.find(r => r.id === selectedRoomId);
-
-  // ── 초기 로딩 ──
+  // ── 초기 로딩 화면 ─────────────────────────────────────────
   if (initLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">불러오는 중…</p>
+          <p className="text-sm text-gray-500">불러오는 중…</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="h-screen flex flex-col bg-gray-50">
 
       {/* ── 헤더 ── */}
       <header className="bg-blue-700 text-white shadow-md shrink-0">
-        <div className="max-w-full px-4 py-3 flex items-center justify-between">
+        <div className="px-4 py-3 flex items-center justify-between">
           <div>
             <h1 className="text-base font-bold leading-tight">🏥 재활치료실 통합 스케줄러</h1>
-            <p className="text-blue-300 text-xs mt-0.5">작업치료실 · 운동치료실</p>
+            <p className="text-blue-300 text-xs">작업치료실 · 운동치료실</p>
           </div>
           <div className="flex items-center gap-3">
             <span className="text-xs text-blue-200 hidden sm:block">{userEmail}</span>
             <button
               onClick={handleLogout}
               disabled={loggingOut}
-              className="text-xs border border-blue-400 text-blue-100 px-3 py-1.5 rounded hover:bg-blue-600 hover:border-blue-500 transition-colors disabled:opacity-50"
+              className="text-xs border border-blue-400 text-blue-100 px-3 py-1.5 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
             >
               {loggingOut ? '…' : '로그아웃'}
             </button>
@@ -143,38 +126,17 @@ export default function SchedulePage() {
         </div>
       </header>
 
-      {/* ── 치료실 탭 ── */}
-      <div className="bg-white border-b border-gray-200 shrink-0">
-        <div className="flex px-2">
-          {rooms.map(room => (
-            <button
-              key={room.id}
-              onClick={() => setSelectedRoomId(room.id)}
-              className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
-                selectedRoomId === room.id
-                  ? 'border-blue-600 text-blue-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300'
-              }`}
-            >
-              {room.name === '작업치료실' ? '🖐 작업치료실' : '🏃 운동치료실'}
-            </button>
-          ))}
-        </div>
-      </div>
-
       {/* ── 주 네비게이션 ── */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-2 shrink-0">
+      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-2 shrink-0 shadow-sm">
         <button
           onClick={prevWeek}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 transition-colors"
-          aria-label="이전 주"
+          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold transition-colors"
         >
           ‹
         </button>
         <button
           onClick={nextWeek}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 transition-colors"
-          aria-label="다음 주"
+          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold transition-colors"
         >
           ›
         </button>
@@ -189,21 +151,18 @@ export default function SchedulePage() {
         >
           오늘
         </button>
-        <span className="text-sm font-medium text-gray-700 ml-1">
-          {fmtDate(weekDates[0])} — {fmtDate(weekDates[4])}
+        <span className="text-sm font-semibold text-gray-700 ml-1">
+          {fmtRange(weekDates[0], weekDates[4])}
         </span>
-        {selectedRoom && (
-          <span className="ml-auto text-xs text-gray-400 hidden sm:block">
-            {selectedRoom.name}
-          </span>
-        )}
       </div>
 
-      {/* ── 그리드 영역 (스크롤) ── */}
+      {/* ── 그리드 ── */}
       <div className="flex-1 overflow-auto">
         <WeeklyGrid
           appointments={appointments}
+          therapists={therapists}
           treatmentCodes={treatmentCodes}
+          rooms={rooms}
           weekDates={weekDates}
           loading={apptLoading}
         />
