@@ -65,12 +65,14 @@ function buildCellMap(appts: AppointmentRow[], weekDates: Date[]) {
 
 // ── Props ────────────────────────────────────────────────────
 interface Props {
-  appointments: AppointmentRow[];
-  therapists:   (Therapist & { room: Room })[];
-  treatmentCodes: TreatmentCode[];
-  rooms:        Room[];
-  weekDates:    Date[];
-  loading?:     boolean;
+  appointments:       AppointmentRow[];
+  therapists:         (Therapist & { room: Room })[];
+  treatmentCodes:     TreatmentCode[];
+  rooms:              Room[];
+  weekDates:          Date[];
+  loading?:           boolean;
+  onCellClick?:       (dayIdx: number, therapistId: string, slotMin: number) => void;
+  onAppointmentClick?:(appt: AppointmentRow) => void;
 }
 
 // 치료실 색상
@@ -83,6 +85,7 @@ const DEFAULT_STYLE = { day: '#6b7280', room: '#9ca3af', th: '#e5e7eb', cellBg: 
 // ── 컴포넌트 ─────────────────────────────────────────────────
 export default function WeeklyGrid({
   appointments, therapists, treatmentCodes, rooms, weekDates, loading,
+  onCellClick, onAppointmentClick,
 }: Props) {
   const codeMap = Object.fromEntries(treatmentCodes.map(c => [c.code, c]));
 
@@ -270,11 +273,13 @@ export default function WeeklyGrid({
                       return (
                         <td
                           key={key}
+                          onClick={() => onCellClick?.(di, t.id, slotMin)}
                           style={{
                             background: todayBg,
                             border: '1px solid #f3f4f6',
                             borderTop: hourBorderTop,
                             height: ROW_H,
+                            cursor: onCellClick ? 'cell' : 'default',
                           }}
                         />
                       );
@@ -295,6 +300,7 @@ export default function WeeklyGrid({
                         key={key}
                         rowSpan={rowspan}
                         title={`${name}${suffix}  ${appt.start_time} (${appt.duration_min}분)`}
+                        onClick={() => onAppointmentClick?.(appt)}
                         style={{
                           background: bg,
                           border: '1px solid #d1d5db',
