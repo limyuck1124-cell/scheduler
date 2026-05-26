@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
 import type { Room, Therapist, TreatmentCode } from '@/types/database';
 
 type TherapistWithRoom = Therapist & { room: { name: string } | null };
@@ -14,7 +15,16 @@ export default function HomePage() {
   const [treatmentCodes, setTreatmentCodes] = useState<TreatmentCode[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
   const router = useRouter();
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    const supabase = createClient();
+    await supabase.auth.signOut();
+    router.push('/login');
+    router.refresh();
+  };
 
   useEffect(() => {
     const supabase = createClient();
@@ -66,8 +76,17 @@ export default function HomePage() {
             <h1 className="text-xl font-bold">🏥 재활치료실 통합 스케줄러</h1>
             <p className="text-blue-200 text-sm">작업치료실 · 운동치료실</p>
           </div>
-          <div className="text-right">
+          <div className="flex items-center gap-4">
             <p className="text-sm text-blue-200">로그인: {user?.email}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="text-blue-700 border-blue-300 hover:bg-blue-600 hover:text-white hover:border-blue-600 bg-white/90"
+            >
+              {loggingOut ? '로그아웃 중...' : '로그아웃'}
+            </Button>
           </div>
         </div>
       </header>
