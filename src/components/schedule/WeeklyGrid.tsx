@@ -107,7 +107,7 @@ export default function WeeklyGrid({
 
   // 헤더 높이
   const H1 = 32, H2 = 26, H3 = 30;
-  const ROW_H = 32;
+  const ROW_H = 38;
   const TIME_W = 52;
   const COL_W  = 84;
 
@@ -286,44 +286,77 @@ export default function WeeklyGrid({
                     }
 
                     const { appt, rowspan } = cell;
-                    const code  = appt.treatment_code ? codeMap[appt.treatment_code] : null;
-                    const rStyle = ROOM_STYLE[t.room?.name ?? ''] ?? DEFAULT_STYLE;
-
-                    let bg = rStyle.cellBg;
-                    if (code) bg = `#${code.color_hex}40`;
-
+                    const code   = appt.treatment_code ? codeMap[appt.treatment_code] : null;
+                    const isBlock = appt.block_type !== '환자치료';
                     const name   = appt.patient?.name ?? appt.block_type;
-                    const suffix = code ? ` ${appt.treatment_code}` : '';
+
+                    // 셀 배경: 처방코드 색을 진하게 (50%), 블록은 주황
+                    let bg = '#e0f2fe'; // 운동치료실 기본
+                    let borderColor = '#7dd3fc';
+                    if (code) {
+                      bg = `#${code.color_hex}60`;
+                      borderColor = `#${code.color_hex}`;
+                    } else if (isBlock) {
+                      bg = '#fef3c7';
+                      borderColor = '#f59e0b';
+                    } else if (t.room?.name === '작업치료실') {
+                      bg = '#dcfce7';
+                      borderColor = '#86efac';
+                    }
+
+                    // 처방코드 뱃지 텍스트 색상 (배경이 밝으면 어둡게)
+                    const badgeBg = code ? `#${code.color_hex}` : (isBlock ? '#f59e0b' : null);
 
                     return (
                       <td
                         key={key}
                         rowSpan={rowspan}
-                        title={`${name}${suffix}  ${appt.start_time} (${appt.duration_min}분)`}
+                        title={`${name}  ${appt.start_time} (${appt.duration_min}분)`}
                         onClick={() => onAppointmentClick?.(appt)}
                         style={{
                           background: bg,
-                          border: '1px solid #d1d5db',
-                          borderTop: hourBorderTop,
+                          border: `1px solid ${borderColor}`,
+                          borderTop: isHour ? `1px solid ${borderColor}` : `1px solid ${borderColor}88`,
                           padding: '2px 4px',
                           verticalAlign: 'top',
                           height: ROW_H * rowspan,
                           cursor: 'pointer',
+                          boxSizing: 'border-box',
                         }}
                       >
-                        <div style={{ lineHeight: 1.3 }}>
-                          <span style={{ fontWeight: 600, color: '#111827' }}>{name}</span>
-                          {code && (
-                            <span
-                              style={{
-                                marginLeft: 3,
-                                fontWeight: 700,
-                                fontSize: 10,
-                                color: `#${code.color_hex}`,
-                              }}
-                            >
-                              {appt.treatment_code}
-                            </span>
+                        <div style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 1,
+                          height: '100%',
+                        }}>
+                          {/* 환자/블록 이름 */}
+                          <div style={{
+                            fontWeight: 700,
+                            fontSize: 11,
+                            color: '#1e293b',
+                            lineHeight: 1.25,
+                            overflow: 'hidden',
+                            wordBreak: 'keep-all',
+                          }}>
+                            {name}
+                          </div>
+                          {/* 처방코드 뱃지 */}
+                          {badgeBg && (
+                            <div style={{
+                              alignSelf: 'flex-start',
+                              background: badgeBg,
+                              color: 'white',
+                              padding: '0px 5px',
+                              borderRadius: 3,
+                              fontSize: 10,
+                              fontWeight: 800,
+                              letterSpacing: '0.03em',
+                              lineHeight: '16px',
+                              textShadow: '0 1px 1px rgba(0,0,0,0.3)',
+                            }}>
+                              {code ? appt.treatment_code : appt.block_type}
+                            </div>
                           )}
                         </div>
                       </td>
