@@ -327,7 +327,9 @@ export default function WeeklyGrid({
                         <div style={{
                           display: 'flex',
                           flexDirection: 'column',
-                          gap: 1,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 2,
                           height: '100%',
                         }}>
                           {/* 환자/블록 이름 */}
@@ -338,13 +340,13 @@ export default function WeeklyGrid({
                             lineHeight: 1.25,
                             overflow: 'hidden',
                             wordBreak: 'keep-all',
+                            textAlign: 'center',
                           }}>
                             {name}
                           </div>
                           {/* 처방코드 뱃지 */}
                           {badgeBg && (
                             <div style={{
-                              alignSelf: 'flex-start',
                               background: badgeBg,
                               color: '#1e293b',
                               padding: '0px 5px',
