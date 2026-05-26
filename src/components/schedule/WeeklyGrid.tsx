@@ -6,9 +6,10 @@ import type { Appointment, Therapist, Room, TreatmentCode } from '@/types/databa
 const SLOT_MIN   = 30;
 const GRID_START = 8 * 60 + 30;  // 08:30
 const GRID_END   = 17 * 60 + 30; // 17:30
-const LUNCH_S    = 12 * 60;      // 12:00
-const LUNCH_E    = 13 * 60;      // 13:00
+const LUNCH_S    = 12 * 60 + 30; // 12:30
+const LUNCH_E    = 13 * 60 + 30; // 13:30
 const LUNCH_N    = (LUNCH_E - LUNCH_S) / SLOT_MIN; // 점심 슬롯 수 (2)
+const AFTER_LUNCH_SLOTS = (GRID_END - LUNCH_E) / SLOT_MIN; // 토요일 오후 슬롯 수 (8)
 
 const TIME_SLOTS: number[] = [];
 for (let m = GRID_START; m < GRID_END; m += SLOT_MIN) TIME_SLOTS.push(m);
@@ -261,6 +262,36 @@ export default function WeeklyGrid({
                 {/* 일반 예약 셀 */}
                 {!isLunch && weekDates.flatMap((date, di) => {
                   const isToday = date.toDateString() === today;
+                  const isSat   = di === weekDates.length - 1;
+                  const isSatPm = isSat && slotMin >= LUNCH_E;
+
+                  // 토요일 오후: 첫 슬롯에서 전체 병합, 나머지 스킵
+                  if (isSatPm) {
+                    if (slotMin === LUNCH_E) {
+                      return [
+                        <td
+                          key="sat-pm"
+                          colSpan={totalCols}
+                          rowSpan={AFTER_LUNCH_SLOTS}
+                          style={{
+                            background: '#f3f4f6',
+                            border: '1px solid #d1d5db',
+                            textAlign: 'center',
+                            fontWeight: 600,
+                            color: '#d1d5db',
+                            letterSpacing: '0.12em',
+                            verticalAlign: 'middle',
+                            height: ROW_H * AFTER_LUNCH_SLOTS,
+                            fontSize: 11,
+                          }}
+                        >
+                          오전 근무
+                        </td>,
+                      ];
+                    }
+                    return [];
+                  }
+
                   return sortedTherapists.map(t => {
                     const key  = `${di}-${t.id}-${si}`;
                     const cell = cellMap.get(key) ?? null;
