@@ -333,7 +333,7 @@ export default function WeeklyGrid({
                           {/* 환자/블록 이름 */}
                           <div style={{
                             fontWeight: 700,
-                            fontSize: 11,
+                            fontSize: 13,
                             color: '#1e293b',
                             lineHeight: 1.25,
                             overflow: 'hidden',
@@ -346,14 +346,13 @@ export default function WeeklyGrid({
                             <div style={{
                               alignSelf: 'flex-start',
                               background: badgeBg,
-                              color: 'white',
+                              color: '#1e293b',
                               padding: '0px 5px',
                               borderRadius: 3,
-                              fontSize: 10,
+                              fontSize: 12,
                               fontWeight: 800,
                               letterSpacing: '0.03em',
-                              lineHeight: '16px',
-                              textShadow: '0 1px 1px rgba(0,0,0,0.3)',
+                              lineHeight: '18px',
                             }}>
                               {code ? appt.treatment_code : appt.block_type}
                             </div>
