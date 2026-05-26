@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import WeeklyGrid, { type AppointmentRow } from '@/components/schedule/WeeklyGrid';
 import PatientSearch from '@/components/schedule/PatientSearch';
+import AppointmentModal, { type ModalInitData } from '@/components/schedule/AppointmentModal';
 import type { Room, Therapist, TreatmentCode } from '@/types/database';
 
 // ── 날짜 유틸 ────────────────────────────────────────────────
@@ -39,6 +40,7 @@ export default function SchedulePage() {
   const [apptLoading,    setApptLoading]    = useState(false);
   const [loggingOut,     setLoggingOut]     = useState(false);
   const [showSearch,     setShowSearch]     = useState(false);
+  const [modalData,      setModalData]      = useState<ModalInitData | null>(null);
 
   const weekDates = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
 
@@ -93,6 +95,22 @@ export default function SchedulePage() {
   const isCurrentWeek =
     getMondayOfWeek(new Date()).toDateString() === weekStart.toDateString();
 
+  // 빈 셀 클릭 → 새 예약 모달
+  const handleCellClick = useCallback((dayIdx: number, therapistId: string, slotMin: number) => {
+    setModalData({ mode: 'create', dayIdx, therapistId, slotMin });
+  }, []);
+
+  // 예약 블록 클릭 → 수정 모달
+  const handleAppointmentClick = useCallback((appt: AppointmentRow) => {
+    setModalData({ mode: 'edit', appointment: appt });
+  }, []);
+
+  // 저장/삭제 후 처리
+  const handleModalSaved = useCallback(() => {
+    setModalData(null);
+    loadAppointments();
+  }, [loadAppointments]);
+
   // ── 초기 로딩 화면 ─────────────────────────────────────────
   if (initLoading) {
     return (
@@ -136,25 +154,13 @@ export default function SchedulePage() {
 
       {/* ── 주 네비게이션 ── */}
       <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-2 shrink-0 shadow-sm">
-        <button
-          onClick={prevWeek}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold transition-colors"
-        >
-          ‹
-        </button>
-        <button
-          onClick={nextWeek}
-          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold transition-colors"
-        >
-          ›
-        </button>
+        <button onClick={prevWeek} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold transition-colors">‹</button>
+        <button onClick={nextWeek} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold transition-colors">›</button>
         <button
           onClick={goToToday}
           disabled={isCurrentWeek}
           className={`text-xs px-2.5 py-1 border rounded transition-colors ${
-            isCurrentWeek
-              ? 'border-gray-200 text-gray-300 cursor-default'
-              : 'border-blue-300 text-blue-600 hover:bg-blue-50'
+            isCurrentWeek ? 'border-gray-200 text-gray-300 cursor-default' : 'border-blue-300 text-blue-600 hover:bg-blue-50'
           }`}
         >
           오늘
@@ -163,14 +169,6 @@ export default function SchedulePage() {
           {fmtRange(weekDates[0], weekDates[4])}
         </span>
       </div>
-
-      {/* ── 환자 검색 모달 ── */}
-      {showSearch && (
-        <PatientSearch
-          treatmentCodes={treatmentCodes}
-          onClose={() => setShowSearch(false)}
-        />
-      )}
 
       {/* ── 그리드 ── */}
       <div className="flex-1 overflow-auto">
@@ -181,8 +179,29 @@ export default function SchedulePage() {
           rooms={rooms}
           weekDates={weekDates}
           loading={apptLoading}
+          onCellClick={handleCellClick}
+          onAppointmentClick={handleAppointmentClick}
         />
       </div>
+
+      {/* ── 환자 검색 모달 ── */}
+      {showSearch && (
+        <PatientSearch
+          treatmentCodes={treatmentCodes}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
+
+      {/* ── 예약 등록/수정 모달 ── */}
+      {modalData && (
+        <AppointmentModal
+          initData={modalData}
+          therapists={therapists}
+          treatmentCodes={treatmentCodes}
+          onSaved={handleModalSaved}
+          onClose={() => setModalData(null)}
+        />
+      )}
     </div>
   );
 }
