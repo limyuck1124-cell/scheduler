@@ -130,7 +130,7 @@ export default function SchedulePage() {
     <div className="h-screen flex flex-col bg-gray-50">
 
       {/* ── 헤더 ── */}
-      <header className="bg-blue-700 text-white shadow-md shrink-0">
+      <header className="no-print bg-blue-700 text-white shadow-md shrink-0">
         <div className="px-4 py-3 flex items-center justify-between">
           <div>
             <h1 className="text-base font-bold leading-tight">🏥 재활치료실 통합 스케줄러</h1>
@@ -163,6 +163,12 @@ export default function SchedulePage() {
               ⚙️ 기준정보
             </button>
             <button
+              onClick={() => window.print()}
+              className="text-xs border border-blue-400 text-blue-100 px-3 py-1.5 rounded hover:bg-blue-600 transition-colors flex items-center gap-1.5"
+            >
+              🖨️ 인쇄
+            </button>
+            <button
               onClick={handleLogout}
               disabled={loggingOut}
               className="text-xs border border-blue-400 text-blue-100 px-3 py-1.5 rounded hover:bg-blue-600 transition-colors disabled:opacity-50"
@@ -174,7 +180,7 @@ export default function SchedulePage() {
       </header>
 
       {/* ── 주 네비게이션 ── */}
-      <div className="bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-2 shrink-0 shadow-sm">
+      <div className="no-print bg-white border-b border-gray-200 px-4 py-2 flex items-center gap-2 shrink-0 shadow-sm">
         <button onClick={prevWeek} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold transition-colors">‹</button>
         <button onClick={nextWeek} className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-100 text-gray-600 text-lg font-bold transition-colors">›</button>
         <button
@@ -192,7 +198,7 @@ export default function SchedulePage() {
       </div>
 
       {/* ── 그리드 ── */}
-      <div className="flex-1 overflow-auto">
+      <div className="grid-scroll flex-1 overflow-auto">
         <WeeklyGrid
           appointments={appointments}
           therapists={therapists}
