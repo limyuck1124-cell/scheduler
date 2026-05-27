@@ -145,6 +145,12 @@ export default function SchedulePage() {
               🔍 환자 검색
             </button>
             <button
+              onClick={() => router.push('/patients')}
+              className="text-xs border border-blue-400 text-blue-100 px-3 py-1.5 rounded hover:bg-blue-600 transition-colors flex items-center gap-1.5"
+            >
+              👤 환자 관리
+            </button>
+            <button
               onClick={() => router.push('/stats')}
               className="text-xs border border-blue-400 text-blue-100 px-3 py-1.5 rounded hover:bg-blue-600 transition-colors flex items-center gap-1.5"
             >
