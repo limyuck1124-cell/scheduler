@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { Appointment, Therapist, Room, TreatmentCode } from '@/types/database';
+import type { Appointment, Therapist, Room, TreatmentCode, Holiday } from '@/types/database';
 
 // ── 상수 ────────────────────────────────────────────────────
 const SLOT_MIN   = 30;
@@ -72,6 +72,7 @@ interface Props {
   treatmentCodes:     TreatmentCode[];
   rooms:              Room[];
   weekDates:          Date[];
+  holidays?:          Holiday[];
   loading?:           boolean;
   onCellClick?:        (dayIdx: number, therapistId: string, slotMin: number) => void;
   onAppointmentClick?: (appt: AppointmentRow) => void;
@@ -87,7 +88,7 @@ const DEFAULT_STYLE = { day: '#6b7280', room: '#9ca3af', th: '#e5e7eb', cellBg: 
 
 // ── 컴포넌트 ─────────────────────────────────────────────────
 export default function WeeklyGrid({
-  appointments, therapists, treatmentCodes, rooms, weekDates, loading,
+  appointments, therapists, treatmentCodes, rooms, weekDates, holidays = [], loading,
   onCellClick, onAppointmentClick, onAppointmentMoved,
 }: Props) {
   const codeMap = Object.fromEntries(treatmentCodes.map(c => [c.code, c]));
@@ -163,20 +164,29 @@ export default function WeeklyGrid({
               시간
             </th>
             {weekDates.map((date, i) => {
-              const isToday = date.toDateString() === today;
-              const bg = isToday ? '#b45309' : '#d97706';
+              const isToday   = date.toDateString() === today;
+              const dateStr   = date.toISOString().slice(0, 10);
+              const holiday   = holidays.find(h => h.date === dateStr);
+              const bg        = holiday ? '#be123c' : isToday ? '#b45309' : '#d97706';
+              const border    = holiday ? '#9f1239' : '#92400e';
               return (
                 <th
                   key={i}
                   colSpan={totalCols}
                   style={{
                     position: 'sticky', top: 0, zIndex: 30,
-                    background: bg, border: '1px solid #92400e',
+                    background: bg, border: `1px solid ${border}`,
                     textAlign: 'center', fontWeight: 700, color: 'white',
-                    height: H1,
+                    height: holiday ? H1 + 10 : H1,
+                    verticalAlign: 'middle',
                   }}
                 >
                   {DAY_KO[i]}&nbsp;({date.getMonth() + 1}/{date.getDate()})
+                  {holiday && (
+                    <div style={{ fontSize: 9, fontWeight: 600, color: '#fecdd3', marginTop: 2, lineHeight: 1 }}>
+                      🚫 {holiday.name}
+                    </div>
+                  )}
                 </th>
               );
             })}

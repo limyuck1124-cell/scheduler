@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import WeeklyGrid, { type AppointmentRow } from '@/components/schedule/WeeklyGrid';
 import PatientSearch from '@/components/schedule/PatientSearch';
 import AppointmentModal, { type ModalInitData } from '@/components/schedule/AppointmentModal';
-import type { Room, Therapist, TreatmentCode } from '@/types/database';
+import type { Room, Therapist, TreatmentCode, Holiday } from '@/types/database';
 
 // ── 날짜 유틸 ────────────────────────────────────────────────
 function getMondayOfWeek(date: Date): Date {
@@ -42,6 +42,7 @@ export default function SchedulePage() {
   const [therapists,     setTherapists]     = useState<(Therapist & { room: Room })[]>([]);
   const [treatmentCodes, setTreatmentCodes] = useState<TreatmentCode[]>([]);
   const [appointments,   setAppointments]   = useState<AppointmentRow[]>([]);
+  const [holidays,       setHolidays]       = useState<Holiday[]>([]);
   const [weekStart,      setWeekStart]      = useState<Date>(() => getMondayOfWeek(new Date()));
   const [initLoading,    setInitLoading]    = useState(true);
   const [apptLoading,    setApptLoading]    = useState(false);
@@ -59,15 +60,18 @@ export default function SchedulePage() {
       if (!user) { router.replace('/login'); return; }
       setUserEmail(user.email ?? '');
 
-      const [roomsRes, therapistsRes, codesRes] = await Promise.all([
+      const [roomsRes, therapistsRes, codesRes, holidaysRes] = await Promise.all([
         supabase.from('rooms').select('*').order('name'),
         supabase.from('therapists').select('*, room:rooms(*)').order('name'),
         supabase.from('treatment_codes').select('*'),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase.from('holidays') as any).select('*').order('date'),
       ]);
 
       setRooms((roomsRes.data ?? []) as Room[]);
       setTherapists((therapistsRes.data ?? []) as (Therapist & { room: Room })[]);
       setTreatmentCodes((codesRes.data ?? []) as TreatmentCode[]);
+      setHolidays((holidaysRes.data ?? []) as Holiday[]);
       setInitLoading(false);
     })();
   }, [router]);
@@ -263,6 +267,7 @@ export default function SchedulePage() {
           treatmentCodes={treatmentCodes}
           rooms={rooms}
           weekDates={weekDates}
+          holidays={holidays}
           loading={apptLoading}
           onCellClick={handleCellClick}
           onAppointmentClick={handleAppointmentClick}
