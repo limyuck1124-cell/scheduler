@@ -291,9 +291,11 @@ export default function WeeklyGrid({
 
                 {/* 일반 예약 셀 */}
                 {!isLunch && weekDates.flatMap((date, di) => {
-                  const isToday = date.toDateString() === today;
-                  const isSat   = di === weekDates.length - 1;
-                  const isSatPm = isSat && slotMin >= LUNCH_E;
+                  const isToday   = date.toDateString() === today;
+                  const isSat     = di === weekDates.length - 1;
+                  const isSatPm   = isSat && slotMin >= LUNCH_E;
+                  const dateStr   = date.toISOString().slice(0, 10);
+                  const holiday   = holidays.find(h => h.date === dateStr);
 
                   // 토요일 오후: 첫 슬롯에서 전체 병합, 나머지 스킵
                   if (isSatPm) {
@@ -332,25 +334,36 @@ export default function WeeklyGrid({
 
                     if (!cell) {
                       const isDropOver = dragOverKey === key;
+                      const cellBg = holiday
+                        ? '#fff1f2'
+                        : isDropOver ? '#dbeafe' : todayBg;
+                      const cellBorder = isDropOver
+                        ? '1px solid #3b82f6'
+                        : holiday ? '1px solid #fecdd3' : '1px solid #f3f4f6';
+                      const cellBorderTop = isDropOver
+                        ? '1px solid #3b82f6'
+                        : holiday ? '1px solid #fecdd3' : hourBorderTop;
                       return (
                         <td
                           key={key}
-                          onClick={() => onCellClick?.(di, t.id, slotMin)}
-                          onDragOver={e => { e.preventDefault(); setDragOverKey(key); }}
+                          onClick={() => { if (!holiday) onCellClick?.(di, t.id, slotMin); }}
+                          onDragOver={e => { if (!holiday) { e.preventDefault(); setDragOverKey(key); } }}
                           onDragLeave={() => setDragOverKey(null)}
                           onDrop={e => {
                             e.preventDefault();
+                            if (holiday) return;
                             const apptId = e.dataTransfer.getData('appointmentId');
                             setDragOverKey(null);
                             setDraggingId(null);
                             if (apptId) onAppointmentMoved?.(apptId, di, t.id, slotMin);
                           }}
+                          title={holiday ? `🚫 ${holiday.name} — 예약 불가` : undefined}
                           style={{
-                            background: isDropOver ? '#dbeafe' : todayBg,
-                            border: isDropOver ? '1px solid #3b82f6' : '1px solid #f3f4f6',
-                            borderTop: isDropOver ? '1px solid #3b82f6' : hourBorderTop,
+                            background: cellBg,
+                            border: cellBorder,
+                            borderTop: cellBorderTop,
                             height: ROW_H,
-                            cursor: onCellClick ? 'cell' : 'default',
+                            cursor: holiday ? 'not-allowed' : onCellClick ? 'cell' : 'default',
                             transition: 'background 0.1s',
                           }}
                         />
