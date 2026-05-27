@@ -11,6 +11,14 @@ body {
   font-family: 'Apple SD Gothic Neo', 'Noto Sans KR', Arial, sans-serif;
 }
 
+/* 인쇄 스타일 */
+@media print {
+  .no-print   { display: none !important; }
+  .print-only { display: block !important; }
+  .grid-scroll { overflow: visible !important; height: auto !important; }
+  body { background: white !important; }
+}
+
 /* 스크롤바 스타일 */
 ::-webkit-scrollbar {
   width: 6px;
