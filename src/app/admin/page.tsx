@@ -3,9 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import type { Room, Therapist, TreatmentCode } from '@/types/database';
+import type { Room, Therapist, TreatmentCode, Holiday } from '@/types/database';
 
-type Tab = 'therapists' | 'codes';
+type Tab = 'therapists' | 'codes' | 'holidays';
 
 type TherapistModal =
   | { mode: 'add' }
@@ -21,6 +21,7 @@ export default function AdminPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [therapists, setTherapists] = useState<Therapist[]>([]);
   const [codes, setCodes] = useState<TreatmentCode[]>([]);
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
   const [loading, setLoading] = useState(true);
 
   // 치료사 모달
@@ -37,6 +38,11 @@ export default function AdminPage() {
   const [cColor, setCColor] = useState('3b82f6');
   const [cSaving, setCSaving] = useState(false);
 
+  // 휴진 폼 (인라인)
+  const [hDate, setHDate] = useState('');
+  const [hName, setHName] = useState('');
+  const [hSaving, setHSaving] = useState(false);
+
   // ── 초기 로드 ────────────────────────────────────────────────
   useEffect(() => {
     const supabase = createClient();
@@ -44,15 +50,18 @@ export default function AdminPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.replace('/login'); return; }
 
-      const [roomsRes, therapistsRes, codesRes] = await Promise.all([
+      const [roomsRes, therapistsRes, codesRes, holidaysRes] = await Promise.all([
         supabase.from('rooms').select('*').order('name'),
         supabase.from('therapists').select('*').order('name'),
         supabase.from('treatment_codes').select('*').order('code'),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (supabase.from('holidays') as any).select('*').order('date'),
       ]);
 
       setRooms((roomsRes.data ?? []) as Room[]);
       setTherapists((therapistsRes.data ?? []) as Therapist[]);
       setCodes((codesRes.data ?? []) as TreatmentCode[]);
+      setHolidays((holidaysRes.data ?? []) as Holiday[]);
       setLoading(false);
     })();
   }, [router]);
@@ -113,6 +122,30 @@ export default function AdminPage() {
     setCodes(prev => prev.filter(c => c.code !== code));
   };
 
+  // ── 휴진 저장 ────────────────────────────────────────────────
+  const saveHoliday = async () => {
+    if (!hDate || !hName.trim()) return;
+    setHSaving(true);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (createClient().from('holidays') as any)
+      .insert({ date: hDate, name: hName.trim() })
+      .select().single();
+    if (!error && data) {
+      setHolidays(prev => [...prev, data as Holiday].sort((a, b) => a.date.localeCompare(b.date)));
+      setHDate('');
+      setHName('');
+    }
+    setHSaving(false);
+  };
+
+  // ── 휴진 삭제 ────────────────────────────────────────────────
+  const deleteHoliday = async (id: string, name: string) => {
+    if (!confirm(`"${name}"을(를) 삭제할까요?`)) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (createClient().from('holidays') as any).delete().eq('id', id);
+    setHolidays(prev => prev.filter(h => h.id !== id));
+  };
+
   // ── 치료사 모달 열기 ─────────────────────────────────────────
   const openAddTherapist = () => {
     setTName('');
@@ -167,17 +200,21 @@ export default function AdminPage() {
 
       {/* ── 탭 ── */}
       <div className="bg-white border-b border-gray-200 px-4 flex">
-        {(['therapists', 'codes'] as const).map(t => (
+        {([
+          { key: 'therapists', label: '👩‍⚕️ 치료사' },
+          { key: 'codes',      label: '🏷️ 처방코드' },
+          { key: 'holidays',   label: '🗓 휴진·공휴일' },
+        ] as const).map(({ key, label }) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={key}
+            onClick={() => setTab(key)}
             className={`px-5 py-3 text-sm font-semibold border-b-2 transition-colors ${
-              tab === t
+              tab === key
                 ? 'border-blue-600 text-blue-700'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            {t === 'therapists' ? '👩‍⚕️ 치료사' : '🏷️ 처방코드'}
+            {label}
           </button>
         ))}
       </div>
@@ -325,6 +362,76 @@ export default function AdminPage() {
                 ))
               )}
             </div>
+          </div>
+        )}
+        {/* ── 휴진·공휴일 관리 ── */}
+        {tab === 'holidays' && (
+          <div>
+            <div className="mb-4">
+              <h2 className="text-sm font-bold text-gray-700 mb-3">휴진 / 공휴일 등록</h2>
+              <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3 shadow-sm">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs font-bold text-gray-600 block mb-1.5">날짜</label>
+                    <input
+                      type="date"
+                      value={hDate}
+                      onChange={e => setHDate(e.target.value)}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-bold text-gray-600 block mb-1.5">이름</label>
+                    <input
+                      type="text"
+                      value={hName}
+                      onChange={e => setHName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveHoliday(); }}
+                      placeholder="예: 추석, 휴진"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+                <button
+                  onClick={saveHoliday}
+                  disabled={!hDate || !hName.trim() || hSaving}
+                  className="w-full bg-blue-600 text-white text-sm py-2 rounded-lg hover:bg-blue-700 disabled:opacity-40 transition-colors font-semibold"
+                >
+                  {hSaving ? '등록 중…' : '+ 등록'}
+                </button>
+              </div>
+            </div>
+
+            {holidays.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2">
+                <span className="text-3xl">🗓</span>
+                <span className="text-sm">등록된 휴진·공휴일이 없습니다</span>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+                {holidays.map((h, i) => (
+                  <div
+                    key={h.id}
+                    className="flex items-center px-4 py-3"
+                    style={{ borderTop: i > 0 ? '1px solid #f3f4f6' : undefined }}
+                  >
+                    <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-sm shrink-0 mr-3">
+                      🚫
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-semibold text-gray-800">{h.name}</div>
+                      <div className="text-xs text-gray-400">{h.date}</div>
+                    </div>
+                    <button
+                      onClick={() => deleteHoliday(h.id, h.name)}
+                      className="text-xs text-red-400 hover:text-red-600 px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors"
+                    >
+                      삭제
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

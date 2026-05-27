@@ -53,6 +53,13 @@ export type AppointmentWithRelations = Appointment & {
   treatment_code_info: TreatmentCode | null;
 };
 
+export type Holiday = {
+  id: string;
+  date: string; // YYYY-MM-DD
+  name: string;
+  created_at: string;
+};
+
 // Supabase 전체 DB 타입
 export type Database = {
   public: {

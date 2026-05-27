@@ -13,10 +13,43 @@ body {
 
 /* 인쇄 스타일 */
 @media print {
+  @page {
+    size: A4 landscape;
+    margin: 8mm 10mm;
+  }
+
   .no-print   { display: none !important; }
   .print-only { display: block !important; }
-  .grid-scroll { overflow: visible !important; height: auto !important; }
-  body { background: white !important; }
+
+  /* 그리드 컨테이너: 스크롤 해제 + 전체 높이 */
+  .grid-scroll {
+    overflow: visible !important;
+    height: auto !important;
+    flex: none !important;
+  }
+
+  /* 페이지 여백·배경 초기화 */
+  body {
+    background: white !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* 헤더·탐색 영역 숨기기 */
+  header, nav { display: none !important; }
+
+  /* 테이블 전체 너비 맞춤 */
+  table {
+    width: 100% !important;
+    min-width: 0 !important;
+    font-size: 9px !important;
+  }
+
+  /* 셀 높이 축소 */
+  td, th { height: auto !important; }
+
+  /* 예약 블록 배경색 강제 출력 */
+  td[style] { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 
 /* 스크롤바 스타일 */
